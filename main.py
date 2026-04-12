@@ -44,7 +44,7 @@ except ImportError:
 # ================= CONFIGURATION =================
 class Config:
     # Bot Settings
-    BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+    BOT_TOKEN = os.environ.get("BOT_TOKEN", "8777583497:AAHICyyUsxIOIwFIUbY75BD6x6OvFoJaECs")
     ADMIN_ID = int(os.environ.get("ADMIN_ID", "8655103281"))
     CHANNEL_USERNAME = os.environ.get("CHANNEL_USERNAME", "@JaiShreeRam181")
     CHANNEL_LINK = os.environ.get("CHANNEL_LINK", "https://t.me/JaiShreeRam181")
