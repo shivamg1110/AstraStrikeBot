@@ -6,8 +6,5 @@ beautifulsoup4
 pandas
 numpy
 pymongo
-mysql-connector-python
 pillow
-gspread
-oauth2client
-pytz
+aiogram
